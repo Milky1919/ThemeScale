@@ -15,6 +15,8 @@ interface SocketContextType {
     submitDone: () => void;
     vote: (choice: 'CONTINUE' | 'REDUCE') => void;
     resetLobby: () => void;
+    updateSettings: (settings: any) => void;
+    updateColor: (color: string) => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -74,11 +76,13 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const submitDone = () => socket?.emit('game:submit_done');
     const vote = (choice: 'CONTINUE' | 'REDUCE') => socket?.emit('vote', { choice });
     const resetLobby = () => socket?.emit('admin:reset_lobby');
+    const updateSettings = (settings: any) => socket?.emit('room:update_settings', settings);
+    const updateColor = (color: string) => socket?.emit('player:update_color', { color });
 
     return (
         <SocketContext.Provider value={{
             socket, isConnected, roomState, myHand, myUserId,
-            joinRoom, startGame, submitMetaphor, moveCard, submitDone, vote, resetLobby
+            joinRoom, startGame, submitMetaphor, moveCard, submitDone, vote, resetLobby, updateSettings, updateColor
         }}>
             {children}
         </SocketContext.Provider>

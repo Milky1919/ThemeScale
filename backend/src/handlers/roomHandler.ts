@@ -77,7 +77,7 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
             resultMessage: room.resultMessage,
             resultInvalidCardIds: room.resultInvalidCardIds,
             theme: room.theme,
-            players: Array.from(room.players.values()).map(p => ({
+            players: Array.from(room.players.values()).map((p: Player) => ({
                 userId: p.userId,
                 name: p.name,
                 color: p.color,
@@ -103,7 +103,7 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
         socket.emit('room:sync', { publicState: roomStateDTO, myHand, userId: finalUserId });
 
         // Broadcast Player Update
-        const playersList = Array.from(room.players.values()).map(p => ({
+        const playersList = Array.from(room.players.values()).map((p: Player) => ({
             userId: p.userId,
             name: p.name,
             color: p.color,
@@ -124,7 +124,7 @@ export const registerRoomHandlers = (io: Server, socket: Socket) => {
                     console.log(`User ${player.name} disconnected from ${roomId}`);
 
                     // Broadcast update
-                    const playersList = Array.from(room.players.values()).map(p => ({
+                    const playersList = Array.from(room.players.values()).map((p: Player) => ({
                         userId: p.userId,
                         name: p.name,
                         color: p.color,

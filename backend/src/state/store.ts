@@ -8,10 +8,8 @@ class Store {
             initialHandCount: 1,
             maxLifes: 2,
             winConditionCount: 3,
-            timeLimitExpression: 60,
-            timeLimitSubmission: 60,
-            timeLimitVoting: 30,
-            maxSpectators: 10
+            timeLimitGame: 120,
+            timeLimitVoting: 30
         };
 
         const hostPlayer: Player = {
@@ -40,6 +38,7 @@ class Store {
             currentLifes: defaultSettings.maxLifes,
             isEndlessMode: false,
             theme: {
+                id: 'default',
                 category: 'Default',
                 title: 'Waiting for Theme...',
                 scaleMin: '1',

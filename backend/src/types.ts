@@ -2,11 +2,19 @@ export type PlayerRole = 'PLAYER' | 'SPECTATOR';
 export type ConnectionStatus = 'ONLINE' | 'OFFLINE';
 export type GamePhase =
     | 'LOBBY'               // 待機中
-    | 'PLAYING_EXPRESSION'  // 表現フェーズ
-    | 'PLAYING_SUBMISSION'  // 提出フェーズ
+    | 'THEME_SELECTION'     // テーマ選択
+    | 'PLAYING'             // プレイ中（表現・提出・並び替え）
     | 'RESULT_REVEAL'       // 結果発表（成功/失敗/ゲーム終了等の表示）
     | 'RESULT_VOTING'       // 失敗時の投票
     | 'ENDED';              // ゲーム終了（クリア/ゲームオーバー/人数不足）
+
+export interface GameSettings {
+    initialHandCount: number;
+    maxLifes: number;
+    winConditionCount: number;
+    timeLimitGame: number;
+    timeLimitVoting: number;
+}
 
 export interface Card {
     id: string;        // UUID v4
@@ -32,25 +40,16 @@ export interface Player {
 }
 
 export interface Theme {
-    category: string;
+    id: string;
+    category?: string;
     title: string;      // テーマ名
     scaleMin: string;   // スケール1の例
     scaleMax: string;   // スケール100の例
-    editingUserId: string | null; // 現在編集中のユーザーID (排他制御)
-    lockExpiresAt: number | null; // ロック自動解除時刻
+    editingUserId?: string | null;
+    lockExpiresAt?: number | null;
 }
 
-export interface GameSettings {
-    initialHandCount: number; // 1-10
-    maxLifes: number;         // 1-10
-    winConditionCount: number;// 1-10
-    timeLimitExpression: number; // 10-300 (秒)
-    timeLimitSubmission: number; // 10-300 (秒)
-    timeLimitVoting: number;     // 10-60 (秒)
-    maxSpectators: number;       // 0-20
-}
-
-export interface GameRoom {
+export interface RoomState {
     roomId: string;
     hostId: string;
     phase: GamePhase;
@@ -69,11 +68,13 @@ export interface GameRoom {
     resultInvalidCardIds?: string[]; // ドボンしたカードのIDリスト
 
     theme: Theme;
+    themeCandidates?: Theme[]; // 選択候補
     players: Map<string, Player>; // userId -> Player
     deck: number[];               // 現在の山札
     cards: Card[];                // ゲーム内の全カード
 
     timerId: NodeJS.Timeout | null; // フェーズタイムアウト用タイマー
+    pausedRemaining?: number | null; // 一時停止時の残り時間 (ms)
 }
 
 // DTOs for Client
@@ -111,6 +112,9 @@ export interface RoomStateDTO {
     resultMessage?: string;
     resultInvalidCardIds?: string[];
     theme: Theme;
+    themeCandidates?: Theme[];
     players: PlayerDTO[];
     cards: CardDTO[];
 }
+
+export type GameRoom = RoomState;

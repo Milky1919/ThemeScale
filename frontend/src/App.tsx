@@ -3,6 +3,7 @@ import { SocketProvider, useSocket } from './context/SocketContext';
 import { Lobby } from './components/Lobby';
 import { GameBoard } from './components/GameBoard';
 import { Result } from './components/Result';
+import { ThemeSelection } from './components/ThemeSelection';
 
 const GameRouter: React.FC = () => {
     const { roomState } = useSocket();
@@ -11,7 +12,11 @@ const GameRouter: React.FC = () => {
         return <Lobby />;
     }
 
-    if (roomState.phase === 'PLAYING_EXPRESSION' || roomState.phase === 'PLAYING_SUBMISSION') {
+    if (roomState.phase === 'THEME_SELECTION') {
+        return <ThemeSelection />;
+    }
+
+    if (roomState.phase === 'PLAYING') {
         return <GameBoard />;
     }
 

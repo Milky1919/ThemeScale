@@ -2,8 +2,8 @@ export type PlayerRole = 'PLAYER' | 'SPECTATOR';
 export type ConnectionStatus = 'ONLINE' | 'OFFLINE';
 export type GamePhase =
     | 'LOBBY'               // 待機中
-    | 'PLAYING_EXPRESSION'  // 表現フェーズ
-    | 'PLAYING_SUBMISSION'  // 提出フェーズ
+    | 'THEME_SELECTION'     // テーマ選択
+    | 'PLAYING'             // プレイ中（表現・提出・並び替え）
     | 'RESULT_REVEAL'       // 結果発表（成功/失敗/ゲーム終了等の表示）
     | 'RESULT_VOTING'       // 失敗時の投票
     | 'ENDED';              // ゲーム終了（クリア/ゲームオーバー/人数不足）
@@ -12,19 +12,18 @@ export interface GameSettings {
     initialHandCount: number;
     maxLifes: number;
     winConditionCount: number;
-    timeLimitExpression: number;
-    timeLimitSubmission: number;
+    timeLimitGame: number;
     timeLimitVoting: number;
-    maxSpectators: number;
 }
 
 export interface Theme {
-    category: string;
-    title: string;
-    scaleMin: string;
-    scaleMax: string;
-    editingUserId: string | null;
-    lockExpiresAt: number | null;
+    id: string;
+    category?: string;
+    title: string;      // テーマ名
+    scaleMin: string;   // スケール1の例
+    scaleMax: string;   // スケール100の例
+    editingUserId?: string | null;
+    lockExpiresAt?: number | null;
 }
 
 export interface PlayerDTO {
@@ -61,6 +60,7 @@ export interface RoomStateDTO {
     resultMessage?: string;
     resultInvalidCardIds?: string[];
     theme: Theme;
+    themeCandidates?: Theme[];
     players: PlayerDTO[];
     cards: CardDTO[];
 }

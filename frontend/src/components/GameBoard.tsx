@@ -1,11 +1,66 @@
 import React, { useState, useEffect } from 'react';
 import { useSocket } from '../context/SocketContext';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragOverlay,
+    defaultDropAnimationSideEffects,
+    DragStartEvent,
+    DragEndEvent,
+    useDroppable
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    sortableKeyboardCoordinates,
+    rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { SortableCard } from './SortableCard';
+import { DraggableCard } from './DraggableCard';
 import { CardDTO } from '../types';
 
 export const GameBoard: React.FC = () => {
-    const { roomState, myHand, myUserId, submitMetaphor, moveCard, submitDone } = useSocket();
+    const { roomState, myHand, myUserId, submitMetaphor, moveCard, submitDone, socket } = useSocket();
     const [metaphorInputs, setMetaphorInputs] = useState<{ [key: string]: string }>({});
+    const [timeLeft, setTimeLeft] = useState(0);
+    const [activeId, setActiveId] = useState<string | null>(null);
 
+    // Theme Editing State
+    const [themeTitle, setThemeTitle] = useState('');
+    const [themeMin, setThemeMin] = useState('');
+    const [themeMax, setThemeMax] = useState('');
+
+    useEffect(() => {
+        if (roomState?.theme) {
+            setThemeTitle(roomState.theme.title);
+            setThemeMin(roomState.theme.scaleMin);
+            setThemeMax(roomState.theme.scaleMax);
+        }
+    }, [roomState?.theme]);
+
+    // Timer Logic
+    useEffect(() => {
+        if (!roomState?.phaseEndTime) {
+            if (roomState?.phaseEndTime === 0) {
+                // Paused or no limit
+            }
+            return;
+        }
+
+        const interval = setInterval(() => {
+            const remaining = Math.max(0, Math.floor((roomState.phaseEndTime - Date.now()) / 1000));
+            setTimeLeft(remaining);
+        }, 1000);
+
+        setTimeLeft(Math.max(0, Math.floor((roomState.phaseEndTime - Date.now()) / 1000)));
+
+        return () => clearInterval(interval);
+    }, [roomState?.phaseEndTime]);
+
+    // Metaphor Inputs Sync
     useEffect(() => {
         if (myHand) {
             const newInputs = { ...metaphorInputs };
@@ -18,10 +73,33 @@ export const GameBoard: React.FC = () => {
         }
     }, [myHand]);
 
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
     if (!roomState) return null;
 
-    const isExpressionPhase = roomState.phase === 'PLAYING_EXPRESSION';
-    const isSubmissionPhase = roomState.phase === 'PLAYING_SUBMISSION';
+    const isHost = roomState.hostId === myUserId;
+    const isPlayingPhase = roomState.phase === 'PLAYING';
+
+    // Theme Editing Handlers
+    const handleThemeFocus = () => {
+        if (!isHost) return;
+        socket?.emit('game:pause_timer');
+    };
+
+    const handleThemeBlur = () => {
+        if (!isHost) return;
+        socket?.emit('game:update_theme_text', {
+            title: themeTitle,
+            scaleMin: themeMin,
+            scaleMax: themeMax
+        });
+        socket?.emit('game:resume_timer');
+    };
 
     const handleMetaphorChange = (cardId: string, text: string) => {
         setMetaphorInputs(prev => ({ ...prev, [cardId]: text }));
@@ -31,188 +109,238 @@ export const GameBoard: React.FC = () => {
         submitMetaphor(cardId, metaphorInputs[cardId]);
     };
 
-    // Submission Logic
-    // Filter cards on table (submitted) and in hand (not submitted)
-    // Actually, `roomState.cards` contains ALL cards in the game (public info).
-    // But for "My Hand", I should use `myHand`.
-    // Wait, `roomState.cards` has `order`.
-    // If `order >= 0`, it's on the table.
-    // If `order === -1`, it's in someone's hand.
-
+    // DnD Logic
     const submittedCards = roomState.cards
         .filter(c => c.order >= 0)
         .sort((a, b) => a.order - b.order);
 
     const myCardsInHand = myHand.filter(c => c.order === -1);
 
-    const handleMoveToTable = (cardId: string) => {
-        // Move to end of table
-        moveCard(cardId, submittedCards.length);
+    const { setNodeRef: setHandRef } = useDroppable({ id: 'hand-container' });
+    const { setNodeRef: setTableRef } = useDroppable({ id: 'table-container' });
+
+    const handleDragStart = (event: DragStartEvent) => {
+        setActiveId(event.active.id as string);
     };
 
-    const handleMoveToHand = (cardId: string) => {
-        // Move back to hand (remove from table)
-        // The backend `move_card` might not support "remove".
-        // Design doc says: "move_card { cardId, index }".
-        // If I want to remove, maybe I need a special index?
-        // Or maybe the design implies "Reorder within table".
-        // Wait, "PLAYER は手札を提出エリアへドラッグ＆ドロップ".
-        // "提出エリア内で何度でもカードを並べ替えることができる".
-        // Can they take it back? "提出完了ボタンを押すまでは...".
-        // Usually yes.
-        // If I didn't implement "remove" in backend, I might be stuck.
-        // Let's check backend `gameHandler.ts`.
-        // It says: `cards` array, `order >= 0`.
-        // `move_card` logic:
-        // "提出済みのカード群 (`order >= 0`) の中で、指定 `index` に挿入。"
-        // It doesn't seem to explicitly handle "remove".
-        // But if I move a card that is `order = -1` to `index`, it becomes `order >= 0`.
-        // If I want to move it back, I might need to implement that.
-        // For now, let's assume once on table, you can only reorder.
-        // Or I can update backend to support `index = -1` to remove?
-        // I'll stick to "Add to Table" and "Reorder".
-        // If I can't remove, that's a limitation for now.
-        // Actually, I can just re-implement `moveCard` to support removal if needed, but let's stick to the plan.
-        // I'll allow reordering.
-    };
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        setActiveId(null);
 
-    const handleReorder = (cardId: string, newIndex: number) => {
-        if (newIndex < 0 || newIndex > submittedCards.length - 1) return;
-        moveCard(cardId, newIndex);
+        if (!over) return;
+
+        const activeCardId = active.id as string;
+        const overId = over.id as string;
+
+        // Find source and destination
+        const isFromHand = myCardsInHand.some(c => c.id === activeCardId);
+        const isFromTable = submittedCards.some(c => c.id === activeCardId);
+
+        if (isFromHand) {
+            // Dragging from Hand
+            if (overId === 'table-container' || submittedCards.some(c => c.id === overId)) {
+                // Dropped onto Table
+                let newIndex = submittedCards.length;
+                if (overId !== 'table-container') {
+                    const overIndex = submittedCards.findIndex(c => c.id === overId);
+                    if (overIndex !== -1) newIndex = overIndex;
+                }
+                moveCard(activeCardId, newIndex);
+            }
+        } else if (isFromTable) {
+            // Dragging from Table
+            if (overId === 'hand-container' || myCardsInHand.some(c => c.id === overId)) {
+                // Dropped back to Hand
+                moveCard(activeCardId, -1);
+            } else if (overId !== 'table-container' && submittedCards.some(c => c.id === overId)) {
+                // Reordering on Table
+                const oldIndex = submittedCards.findIndex(c => c.id === activeCardId);
+                const newIndex = submittedCards.findIndex(c => c.id === overId);
+                if (oldIndex !== newIndex) {
+                    moveCard(activeCardId, newIndex);
+                }
+            }
+        }
     };
 
     const myPlayer = roomState.players.find(p => p.userId === myUserId);
-    const isMyTurnToSubmit = isSubmissionPhase && !myPlayer?.isSubmitted;
+
+    const renderCard = (card: CardDTO, isOverlay = false) => {
+        const isMine = card.ownerId === myUserId;
+        const owner = roomState.players.find(p => p.userId === card.ownerId);
+        const borderColor = owner?.color || '#ccc';
+
+        return (
+            <div
+                className={`bg-white p-3 rounded shadow w-40 relative group border-l-4 select-none ${isOverlay ? 'opacity-80 scale-105 cursor-grabbing' : ''}`}
+                style={{ borderLeftColor: borderColor }}
+            >
+                <div className="text-xs text-gray-500 mb-1 flex justify-between">
+                    <span style={{ color: owner?.color, fontWeight: 'bold' }}>{owner?.name}</span>
+                    {isMine && <span className="font-bold text-indigo-600">{myHand.find(c => c.id === card.id)?.number}</span>}
+                </div>
+
+                {isMine ? (
+                    <div className="mb-2">
+                        <input
+                            type="text"
+                            value={metaphorInputs[card.id] || ''}
+                            onChange={(e) => handleMetaphorChange(card.id, e.target.value)}
+                            onBlur={() => handleMetaphorSubmit(card.id)}
+                            onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on input
+                            onKeyDown={(e) => e.stopPropagation()}
+                            className="w-full border rounded px-1 py-0.5 text-sm"
+                            placeholder="たとえを入力..."
+                            maxLength={50}
+                        />
+                    </div>
+                ) : (
+                    <div className="font-bold text-md mb-2 break-words leading-tight min-h-[1.5em]">
+                        {card.metaphor || <span className="text-gray-300 text-xs">入力中...</span>}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     return (
-        <div className="min-h-screen bg-gray-100 p-4">
-            {/* Header / Theme */}
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6 text-center">
-                <h2 className="text-gray-500 uppercase tracking-wide text-sm font-semibold">Current Theme</h2>
-                <h1 className="text-3xl font-bold text-indigo-600 my-2">{roomState.theme.title}</h1>
-                <div className="flex justify-between items-center max-w-lg mx-auto text-gray-700 font-medium">
-                    <div className="text-left">
-                        <span className="block text-xs text-gray-400">Min (1)</span>
-                        {roomState.theme.scaleMin}
+        <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+        >
+            <div className="min-h-screen bg-gray-100 p-4">
+                {/* Header / Theme */}
+                <div className="bg-white p-6 rounded-lg shadow-md mb-6 text-center relative">
+                    <h2 className="text-gray-500 uppercase tracking-wide text-sm font-semibold">現在のテーマ</h2>
+
+                    {isHost ? (
+                        <input
+                            type="text"
+                            value={themeTitle}
+                            onChange={(e) => setThemeTitle(e.target.value)}
+                            onFocus={handleThemeFocus}
+                            onBlur={handleThemeBlur}
+                            className="text-3xl font-bold text-indigo-600 my-2 text-center w-full border-b-2 border-transparent focus:border-indigo-500 outline-none"
+                        />
+                    ) : (
+                        <h1 className="text-3xl font-bold text-indigo-600 my-2">{roomState.theme.title}</h1>
+                    )}
+
+                    <div className="flex justify-between items-center max-w-lg mx-auto text-gray-700 font-medium">
+                        <div className="text-left w-1/3">
+                            <span className="block text-xs text-gray-400">最小 (1)</span>
+                            {isHost ? (
+                                <input
+                                    type="text"
+                                    value={themeMin}
+                                    onChange={(e) => setThemeMin(e.target.value)}
+                                    onFocus={handleThemeFocus}
+                                    onBlur={handleThemeBlur}
+                                    className="w-full border-b border-gray-300 focus:border-indigo-500 outline-none"
+                                />
+                            ) : (
+                                roomState.theme.scaleMin
+                            )}
+                        </div>
+                        <div className="h-1 bg-gray-300 flex-grow mx-4 rounded"></div>
+                        <div className="text-right w-1/3">
+                            <span className="block text-xs text-gray-400">最大 (100)</span>
+                            {isHost ? (
+                                <input
+                                    type="text"
+                                    value={themeMax}
+                                    onChange={(e) => setThemeMax(e.target.value)}
+                                    onFocus={handleThemeFocus}
+                                    onBlur={handleThemeBlur}
+                                    className="w-full border-b border-gray-300 focus:border-indigo-500 outline-none text-right"
+                                />
+                            ) : (
+                                roomState.theme.scaleMax
+                            )}
+                        </div>
                     </div>
-                    <div className="h-1 bg-gray-300 flex-grow mx-4 rounded"></div>
-                    <div className="text-right">
-                        <span className="block text-xs text-gray-400">Max (100)</span>
-                        {roomState.theme.scaleMax}
+                    <div className="mt-4 text-sm text-gray-500">
+                        残り時間: {timeLeft}秒
                     </div>
-                </div>
-                <div className="mt-4 text-sm text-gray-500">
-                    Time Remaining: {Math.max(0, Math.floor((roomState.phaseEndTime - Date.now()) / 1000))}s
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Left: My Hand (Expression Phase) */}
-                <div className="lg:col-span-1">
-                    <h3 className="text-xl font-bold mb-4">My Hand</h3>
-                    <div className="space-y-4">
-                        {myHand.map(card => (
-                            <div key={card.id} className={`bg-white p-4 rounded-lg shadow border-l-4 ${card.order >= 0 ? 'border-gray-400 opacity-50' : 'border-indigo-500'}`}>
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="font-bold text-2xl text-indigo-600">{card.number}</span>
-                                    {card.order >= 0 && <span className="text-xs bg-gray-200 px-2 py-1 rounded">Submitted</span>}
-                                </div>
-
-                                {isExpressionPhase && (
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            value={metaphorInputs[card.id] || ''}
-                                            onChange={(e) => handleMetaphorChange(card.id, e.target.value)}
-                                            onBlur={() => handleMetaphorSubmit(card.id)}
-                                            className="flex-grow border rounded px-2 py-1 text-sm"
-                                            placeholder="Enter metaphor..."
-                                            maxLength={50}
-                                        />
-                                        <button
-                                            onClick={() => handleMetaphorSubmit(card.id)}
-                                            className="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700"
-                                        >
-                                            Save
-                                        </button>
-                                    </div>
-                                )}
-                                {!isExpressionPhase && (
-                                    <div className="text-lg font-medium text-gray-800">
-                                        {card.metaphor || <span className="text-gray-400 italic">No metaphor</span>}
-                                    </div>
-                                )}
-
-                                {isSubmissionPhase && card.order === -1 && (
-                                    <button
-                                        onClick={() => handleMoveToTable(card.id)}
-                                        className="mt-2 w-full bg-green-500 text-white py-1 rounded hover:bg-green-600"
-                                    >
-                                        Add to Table
-                                    </button>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Right: Table / Submission Area */}
-                <div className="lg:col-span-2">
-                    <h3 className="text-xl font-bold mb-4">Table (Low → High)</h3>
-                    <div className="bg-slate-200 p-6 rounded-xl min-h-[300px] flex flex-wrap gap-4 items-start content-start">
-                        {submittedCards.length === 0 && (
-                            <div className="w-full text-center text-gray-500 mt-10">No cards submitted yet.</div>
-                        )}
-                        {submittedCards.map((card, index) => {
-                            const isMine = card.ownerId === myUserId;
-                            const owner = roomState.players.find(p => p.userId === card.ownerId);
-
-                            return (
-                                <div key={card.id} className="bg-white p-3 rounded shadow w-40 relative group">
-                                    <div className="text-xs text-gray-500 mb-1 flex justify-between">
-                                        <span style={{ color: owner?.color }}>{owner?.name}</span>
-                                        {isMine && <span className="font-bold text-indigo-600">{myHand.find(c => c.id === card.id)?.number}</span>}
-                                    </div>
-                                    <div className="font-bold text-md mb-2 break-words leading-tight">
-                                        {card.metaphor}
-                                    </div>
-
-                                    {isSubmissionPhase && isMine && (
-                                        <div className="flex justify-between mt-2">
-                                            <button
-                                                onClick={() => handleReorder(card.id, index - 1)}
-                                                disabled={index === 0}
-                                                className="bg-gray-100 hover:bg-gray-200 px-2 rounded disabled:opacity-30"
-                                            >
-                                                ←
-                                            </button>
-                                            <button
-                                                onClick={() => handleReorder(card.id, index + 1)}
-                                                disabled={index === submittedCards.length - 1}
-                                                className="bg-gray-100 hover:bg-gray-200 px-2 rounded disabled:opacity-30"
-                                            >
-                                                →
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {isSubmissionPhase && (
-                        <div className="mt-6 flex justify-end">
-                            <button
-                                onClick={submitDone}
-                                disabled={myPlayer?.isSubmitted}
-                                className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold text-lg shadow hover:bg-indigo-700 disabled:bg-gray-400"
-                            >
-                                {myPlayer?.isSubmitted ? "Waiting for others..." : "Finish Submission"}
-                            </button>
+                    {roomState.phaseEndTime === 0 && (
+                        <div className="absolute top-2 right-2 text-red-500 font-bold animate-pulse">
+                            一時停止中
                         </div>
                     )}
                 </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    {/* Left: My Hand */}
+                    <div
+                        ref={setHandRef}
+                        id="hand-container"
+                        className="lg:col-span-1 bg-gray-200 p-4 rounded-lg min-h-[200px]"
+                    >
+                        <h3 className="text-xl font-bold mb-4">自分の手札</h3>
+                        <div className="space-y-4">
+                            {myCardsInHand.map(card => (
+                                <DraggableCard key={card.id} id={card.id} disabled={!isPlayingPhase}>
+                                    {renderCard(card)}
+                                </DraggableCard>
+                            ))}
+                            {myCardsInHand.length === 0 && (
+                                <div className="text-gray-500 text-center py-8">
+                                    手札はありません
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Right: Table / Submission Area */}
+                    <div className="lg:col-span-2">
+                        <h3 className="text-xl font-bold mb-4">場 (低い順 → 高い順)</h3>
+                        <SortableContext
+                            items={submittedCards.map(c => c.id)}
+                            strategy={rectSortingStrategy}
+                        >
+                            <div
+                                ref={setTableRef}
+                                id="table-container"
+                                className="bg-slate-300 p-6 rounded-xl min-h-[300px] flex flex-wrap gap-4 items-start content-start transition-colors"
+                            >
+                                {submittedCards.length === 0 && (
+                                    <div className="w-full text-center text-gray-500 mt-10 pointer-events-none">
+                                        ここにカードをドラッグ＆ドロップ
+                                    </div>
+                                )}
+                                {submittedCards.map((card) => {
+                                    const isMine = card.ownerId === myUserId;
+                                    return (
+                                        <SortableCard key={card.id} id={card.id} disabled={!isPlayingPhase || !isMine}>
+                                            {renderCard(card)}
+                                        </SortableCard>
+                                    );
+                                })}
+                            </div>
+                        </SortableContext>
+
+                        {isPlayingPhase && (
+                            <div className="mt-6 flex justify-end">
+                                <button
+                                    onClick={submitDone}
+                                    disabled={myPlayer?.isSubmitted}
+                                    className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold text-lg shadow hover:bg-indigo-700 disabled:bg-gray-400 transition-colors"
+                                >
+                                    {myPlayer?.isSubmitted ? "他プレイヤーの提出待ち..." : "提出完了"}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
-        </div>
+
+            <DragOverlay dropAnimation={{ sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: '0.5' } } }) }}>
+                {activeId ? (
+                    renderCard(roomState.cards.find(c => c.id === activeId)!, true)
+                ) : null}
+            </DragOverlay>
+        </DndContext>
     );
 };
