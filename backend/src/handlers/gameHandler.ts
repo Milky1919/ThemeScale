@@ -535,3 +535,32 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
     socket.on('vote', vote);
     socket.on('admin:reset_lobby', resetLobby);
 };
+
+export const checkTimeouts = (io: Server) => {
+    const now = Date.now();
+    for (const [roomId, room] of store.getRooms()) {
+        if (room.phaseEndTime > 0 && now >= room.phaseEndTime) {
+            console.log(`Room ${roomId} time expired for phase ${room.phase}`);
+
+            if (room.phase === 'PLAYING') {
+                // Time's up! Force Game Over or Result
+                room.phase = 'ENDED';
+                room.resultMessage = "時間切れ！ゲームオーバー";
+                room.phaseEndTime = 0;
+
+                io.to(roomId).emit('room:update', {
+                    phase: room.phase,
+                    phaseEndTime: 0,
+                    resultMessage: room.resultMessage
+                });
+            } else if (room.phase === 'RESULT_VOTING') {
+                // Voting time over, force next round or end
+                // For now, let's just force next round logic similar to 'CONTINUE' majority
+                // Or just reset to LOBBY if undecided?
+                // Let's force a "CONTINUE" behavior for simplicity or just stop the timer.
+                room.phaseEndTime = 0;
+                io.to(roomId).emit('room:update', { phaseEndTime: 0 });
+            }
+        }
+    }
+};
