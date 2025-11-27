@@ -74,7 +74,11 @@ export const GameBoard: React.FC = () => {
     }, [myHand]);
 
     const sensors = useSensors(
-        useSensor(PointerSensor),
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 5,
+            },
+        }),
         useSensor(KeyboardSensor, {
             coordinateGetter: sortableKeyboardCoordinates,
         })
@@ -138,10 +142,14 @@ export const GameBoard: React.FC = () => {
 
         if (isFromHand) {
             // Dragging from Hand
-            if (overId === 'table-container' || submittedCards.some(c => c.id === overId)) {
+            // Check if dropped on table container OR any card on the table
+            const isOverTable = overId === 'table-container';
+            const isOverTableCard = submittedCards.some(c => c.id === overId);
+
+            if (isOverTable || isOverTableCard) {
                 // Dropped onto Table
                 let newIndex = submittedCards.length;
-                if (overId !== 'table-container') {
+                if (!isOverTable) {
                     const overIndex = submittedCards.findIndex(c => c.id === overId);
                     if (overIndex !== -1) newIndex = overIndex;
                 }
@@ -172,7 +180,7 @@ export const GameBoard: React.FC = () => {
 
         return (
             <div
-                className={`bg-white p-3 rounded shadow w-40 relative group border-l-4 select-none ${isOverlay ? 'opacity-80 scale-105 cursor-grabbing' : ''}`}
+                className={`bg-white p-3 rounded shadow w-40 relative group border-l-4 select-none ${isOverlay ? 'opacity-80 scale-105 cursor-grabbing pointer-events-none' : ''}`}
                 style={{ borderLeftColor: borderColor }}
             >
                 <div className="text-xs text-gray-500 mb-1 flex justify-between">
