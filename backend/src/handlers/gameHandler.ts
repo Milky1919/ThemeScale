@@ -269,6 +269,13 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
         const { room, player } = getPlayerRoom();
         if (!room || !player) return;
 
+        // Check if player has cards in hand
+        const hasCardsInHand = room.cards.some(c => c.ownerId === player.userId && c.order === -1);
+        if (hasCardsInHand) {
+            socket.emit('error', { code: 'CARDS_IN_HAND', message: '全ての手札を場に出してください。' });
+            return;
+        }
+
         player.isSubmitted = !player.isSubmitted;
 
         io.to(room.roomId).emit('player:update', Array.from(room.players.values()).map(p => ({

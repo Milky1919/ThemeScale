@@ -3,7 +3,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { registerRoomHandlers } from './handlers/roomHandler';
-import { registerGameHandlers } from './handlers/gameHandler';
+import { registerGameHandlers, checkTimeouts } from './handlers/gameHandler';
 
 const app = express();
 app.use(cors());
@@ -34,4 +34,9 @@ httpServer.listen(PORT, () => {
     console.log(`Local: http://localhost:${PORT}`);
     console.log(`Frontend: http://localhost:5173`);
     console.log(`App (via Nginx): http://localhost`);
+
+    // Start Timer Loop
+    setInterval(() => {
+        checkTimeouts(io);
+    }, 1000);
 });

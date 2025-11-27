@@ -72,7 +72,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const startGame = () => socket?.emit('game:start');
     const submitMetaphor = (cardId: string, text: string) => socket?.emit('game:submit_metaphor', { cardId, text });
-    const moveCard = (cardId: string, index: number) => socket?.emit('game:move_card', { cardId, index });
+    const moveCard = (cardId: string, order: number) => socket?.emit('game:move_card', { cardId, order });
     const submitDone = () => socket?.emit('game:submit_done');
     const vote = (choice: 'CONTINUE' | 'REDUCE') => socket?.emit('vote', { choice });
     const resetLobby = () => socket?.emit('admin:reset_lobby');
