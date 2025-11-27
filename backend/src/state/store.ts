@@ -73,7 +73,7 @@ class Store {
     }
 
     private generateColor(): string {
-        const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEEAD', '#D4A5A5', '#9B59B6', '#3498DB'];
+        const colors = ['#E63946', '#F1FAEE', '#A8DADC', '#457B9D', '#1D3557', '#E76F51', '#F4A261', '#2A9D8F'];
         return colors[Math.floor(Math.random() * colors.length)];
     }
 }

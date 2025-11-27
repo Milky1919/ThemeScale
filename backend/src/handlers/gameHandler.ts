@@ -118,6 +118,17 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
             }
         });
 
+        io.to(room.roomId).emit('player:update', Array.from(room.players.values()).map(p => ({
+            userId: p.userId,
+            name: p.name,
+            color: p.color,
+            role: p.role,
+            status: p.status,
+            isReady: p.isReady,
+            isSubmitted: p.isSubmitted,
+            vote: p.vote
+        })));
+
         startThemeSelection(room);
     };
 

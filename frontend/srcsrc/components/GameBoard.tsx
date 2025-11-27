@@ -69,7 +69,7 @@ const GameContent: React.FC<{
             >
                 <div className="text-xs text-gray-500 mb-1 flex justify-between">
                     <span style={{ color: owner?.color, fontWeight: 'bold' }}>{owner?.name}</span>
-                    {isMine && <span className="font-bold text-indigo-600 text-lg">{myHand.find(c => c.id === card.id)?.number}</span>}
+                    {isMine && <span className="font-bold text-indigo-600">{myHand.find(c => c.id === card.id)?.number}</span>}
                 </div>
 
                 {isMine ? (
