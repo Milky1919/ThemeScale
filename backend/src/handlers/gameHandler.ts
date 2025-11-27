@@ -372,23 +372,25 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
             // Prepare next round
             room.currentRound++;
 
-            // Replenish deck if needed?
-            // Usually we keep the deck or reshuffle used cards?
-            // For simplicity, let's just reshuffle everything for now or keep drawing.
-            // If deck is empty, we might need to handle it.
+            // Return cards from the previous round to the deck.
+            const usedCardNumbers = room.cards.map(c => c.number);
+            room.deck.push(...usedCardNumbers);
 
-            // Distribute new cards
+            // Shuffle the deck.
+            for (let i = room.deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [room.deck[i], room.deck[j]] = [room.deck[j], room.deck[i]];
+            }
+
+            // Check if there are enough cards for the next round.
             if (players.length * room.currentHandCount > room.deck.length) {
-                // Reshuffle used cards? Or just end game?
-                // For now, let's just try to distribute what we can or error.
-                // Ideally we should reshuffle.
-                // Reset deck
-                room.deck = Array.from({ length: 100 }, (_, i) => i + 1);
-                // Shuffle
-                for (let i = room.deck.length - 1; i > 0; i--) {
-                    const j = Math.floor(Math.random() * (i + 1));
-                    [room.deck[i], room.deck[j]] = [room.deck[j], room.deck[i]];
-                }
+                room.phase = 'ENDED';
+                room.resultMessage = "山札のカードが足りません。";
+                io.to(room.roomId).emit('room:update', {
+                    phase: room.phase,
+                    resultMessage: room.resultMessage
+                });
+                return;
             }
 
             room.cards = [];
@@ -407,6 +409,8 @@ export const registerGameHandlers = (io: Server, socket: Socket) => {
                             isSubmitted: false
                         };
                         room.cards.push(card);
+                    } else {
+                        console.error(`[Room ${room.roomId}] Deck empty during card distribution!`);
                     }
                 }
             });
