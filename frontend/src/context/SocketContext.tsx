@@ -67,7 +67,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }, []);
 
     const joinRoom = (roomId: string, name: string) => {
-        socket?.emit('join', { roomId, name, userId: myUserId });
+        const userId = myUserId || undefined;
+        socket?.emit('join', { roomId, name, userId });
     };
 
     const startGame = () => socket?.emit('game:start');
