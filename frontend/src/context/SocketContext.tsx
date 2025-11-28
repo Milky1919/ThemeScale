@@ -10,7 +10,7 @@ interface SocketContextType {
     myUserId: string | null;
     joinRoom: (roomId: string, name: string) => void;
     startGame: () => void;
-    submitMetaphor: (cardId: string, text: string) => void;
+    submitMetaphor: (cardId: string, metaphor: string) => void;
     moveCard: (cardId: string, index: number) => void;
     submitDone: () => void;
     vote: (choice: 'CONTINUE' | 'REDUCE') => void;
@@ -72,7 +72,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     const startGame = () => socket?.emit('game:start');
-    const submitMetaphor = (cardId: string, text: string) => socket?.emit('game:submit_metaphor', { cardId, text });
+    const submitMetaphor = (cardId: string, metaphor: string) => socket?.emit('game:submit_metaphor', { cardId, metaphor });
     const moveCard = (cardId: string, order: number) => socket?.emit('game:move_card', { cardId, order });
     const submitDone = () => socket?.emit('game:submit_done');
     const vote = (choice: 'CONTINUE' | 'REDUCE') => socket?.emit('vote', { choice });

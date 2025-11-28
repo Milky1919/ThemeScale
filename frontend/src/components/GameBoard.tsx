@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSocket } from '../context/SocketContext';
+import { debounce } from 'lodash';
 import {
     DndContext,
     pointerWithin,
@@ -30,7 +31,6 @@ const GameContent: React.FC<{
     myUserId: string | null;
     metaphorInputs: { [key: string]: string };
     handleMetaphorChange: (id: string, text: string) => void;
-    handleMetaphorSubmit: (id: string) => void;
     submitDone: () => void;
     activeId: string | null;
     isHost: boolean;
@@ -44,7 +44,7 @@ const GameContent: React.FC<{
     handleThemeFocus: () => void;
     handleThemeBlur: () => void;
 }> = ({
-    roomState, myHand, myUserId, metaphorInputs, handleMetaphorChange, handleMetaphorSubmit, submitDone, activeId,
+    roomState, myHand, myUserId, metaphorInputs, handleMetaphorChange, submitDone, activeId,
     isHost, timeLeft, themeTitle, setThemeTitle, themeMin, setThemeMin, themeMax, setThemeMax, handleThemeFocus, handleThemeBlur
 }) => {
     const isPlayingPhase = roomState.phase === 'PLAYING';
@@ -78,7 +78,6 @@ const GameContent: React.FC<{
                             type="text"
                             value={metaphorInputs[card.id] || ''}
                             onChange={(e) => handleMetaphorChange(card.id, e.target.value)}
-                            onBlur={() => handleMetaphorSubmit(card.id)}
                             onPointerDown={(e) => e.stopPropagation()}
                             onKeyDown={(e) => e.stopPropagation()}
                             className="w-full border rounded px-1 py-0.5 text-sm"
@@ -321,12 +320,16 @@ export const GameBoard: React.FC = () => {
         socket?.emit('game:resume_timer');
     };
 
+    const debouncedSubmit = useCallback(
+        debounce((cardId: string, metaphor: string) => {
+            submitMetaphor(cardId, metaphor);
+        }, 300),
+        [submitMetaphor]
+    );
+
     const handleMetaphorChange = (cardId: string, text: string) => {
         setMetaphorInputs(prev => ({ ...prev, [cardId]: text }));
-    };
-
-    const handleMetaphorSubmit = (cardId: string) => {
-        submitMetaphor(cardId, metaphorInputs[cardId]);
+        debouncedSubmit(cardId, text);
     };
 
     // DnD Logic
@@ -421,7 +424,6 @@ export const GameBoard: React.FC = () => {
                 myUserId={myUserId}
                 metaphorInputs={metaphorInputs}
                 handleMetaphorChange={handleMetaphorChange}
-                handleMetaphorSubmit={handleMetaphorSubmit}
                 submitDone={submitDone}
                 activeId={activeId}
                 isHost={isHost}
